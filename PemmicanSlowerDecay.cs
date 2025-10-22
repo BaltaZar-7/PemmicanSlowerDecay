@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections;
 using System.Reflection;
-using MelonLoader;
 using HarmonyLib;
+using MelonLoader;
 using Il2Cpp;
+using UnityEngine;
 
 public class Main : MelonMod
 {
@@ -10,46 +12,80 @@ public class Main : MelonMod
 
     public override void OnInitializeMelon()
     {
-        MelonLogger.Msg("PemmicanSlowerDecay loaded successfully!");
+        MelonLogger.Msg("[PemmicanSlowerDecay] Mod initialized, ready to patch pemmican decay.");
 
-        Type gearDecayType = AccessTools.TypeByName("GearDecayModifier.Main");
-        if (gearDecayType != null)
+        // --- GearDecayModifier mod block ---
+        try
         {
-            MethodInfo method = AccessTools.Method(gearDecayType, "ApplyDecayModifier", new Type[] { typeof(GearItem) });
-            if (method != null)
+            Type gearDecayType = AccessTools.TypeByName("GearDecayModifier.Main");
+            if (gearDecayType != null)
             {
-                harmony = new HarmonyLib.Harmony("com.yourname.pemmicanblock");
-                harmony.Patch(
-                    method,
-                    prefix: new HarmonyMethod(typeof(GearDecayModifier_BlockPemmican).GetMethod(nameof(GearDecayModifier_BlockPemmican.Prefix)))
-                );
-                MelonLogger.Msg("[PemmicanSlowerDecay] GearDecayModifier patch applied.");
+                MethodInfo method = AccessTools.Method(gearDecayType, "ApplyDecayModifier", new Type[] { typeof(GearItem) });
+                if (method != null)
+                {
+                    harmony = new HarmonyLib.Harmony("com.pemmican.blocker");
+                    harmony.Patch(
+                        method,
+                        prefix: new HarmonyMethod(typeof(GearDecayModifier_BlockPemmican)
+                            .GetMethod(nameof(GearDecayModifier_BlockPemmican.Prefix)))
+                    );
+                    MelonLogger.Msg("[PemmicanSlowerDecay] GearDecayModifier patch successfully applied.");
+                }
+            }
+            else
+            {
+                MelonLogger.Msg("[PemmicanSlowerDecay] GearDecayModifier not found, skipping blocker.");
             }
         }
-        else
+        catch (Exception e)
         {
-            MelonLogger.Msg("[PemmicanSlowerDecay] GearDecayModifier not found, skipping patch.");
+            MelonLogger.Warning("[PemmicanSlowerDecay] Error while patching GearDecayModifier: " + e);
         }
     }
 }
 
-[HarmonyPatch(typeof(GearItem), nameof(GearItem.Degrade), new Type[] { typeof(float) })]
-internal static class GearItem_Degrade_Pemmican
+[HarmonyPatch(typeof(GearItem), nameof(GearItem.Awake))]
+internal static class GearItem_Awake_Patch
 {
-    private static void Prefix(GearItem __instance, ref float hp)
+    private static void Postfix(GearItem __instance)
     {
-        if (__instance == null || string.IsNullOrEmpty(__instance.name))
+        if (__instance == null) return;
+
+        string nm = __instance.name ?? "<null>";
+
+        if (!nm.Contains("GEAR_CookedBarPemmican", StringComparison.OrdinalIgnoreCase))
             return;
 
-        if (!__instance.name.Equals("GEAR_CookedBarPemmican", StringComparison.OrdinalIgnoreCase))
-            return;
+        MelonLogger.Msg($"[PemmicanSlowerDecay] Awake detected for {nm} (id={__instance.m_InstanceID})");
 
-        float decayMultiplier = 0.0125f;
-        hp *= decayMultiplier;
+        MelonCoroutines.Start(DelayedDecayPatch(__instance));
+    }
+
+    private static IEnumerator DelayedDecayPatch(GearItem gi)
+    {
+        for (int i = 0; i < 5; i++)
+            yield return null;
+
+        if (gi == null)
+            yield break;
+
+        if (gi.m_FoodItem == null)
+        {
+            MelonLogger.Msg($"[PemmicanSlowerDecay] {gi.name} has no FoodItem even after delay — skipping.");
+            yield break;
+        }
+
+        float oldInside = gi.m_FoodItem.m_DailyHPDecayInside;
+        float oldOutside = gi.m_FoodItem.m_DailyHPDecayOutside;
+
+        gi.m_FoodItem.m_DailyHPDecayInside = 0.025f;
+        gi.m_FoodItem.m_DailyHPDecayOutside = 0.0025f;
+
+        MelonLogger.Msg($"[PemmicanSlowerDecay] Patched {gi.name} decay: inside {oldInside} --> {gi.m_FoodItem.m_DailyHPDecayInside}, outside {oldOutside} --> {gi.m_FoodItem.m_DailyHPDecayOutside}");
     }
 }
 
-// === GearDecayModifier Mod block patch ===
+// === GearDecayModifier mod block ===
 internal static class GearDecayModifier_BlockPemmican
 {
     public static bool Prefix(GearItem gi, ref float __result)
