@@ -4,6 +4,7 @@
     <PropertyGroup>
         <!--This needs to be changed for the mod to compile.-->
         <TheLongDarkPath>D:\SteamLibrary\steamapps\common\TheLongDark</TheLongDarkPath>
+        <Platforms>AnyCPU;x64</Platforms>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -44,6 +45,9 @@
             <Private>False</Private>
         </Reference>
     </ItemDefinitionGroup>
+    <ItemGroup>
+      <Compile Remove="GearDecayModifierBlocker.cs" />
+    </ItemGroup>
 
     <!--This is the list of assemblies that the mod references. Most of these are unnecessary for normal mods, but are included here for completeness.-->
     <ItemGroup>
