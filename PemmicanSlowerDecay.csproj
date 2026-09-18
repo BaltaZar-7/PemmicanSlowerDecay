@@ -92,5 +92,8 @@
         <Reference Include="UnityEngine.InputModule" />
         <Reference Include="UnityEngine.Il2CppAssetBundleManager" />
         <Reference Include="UnityEngine.Il2CppImageConversionManager" />
+        <Reference Include="UnityEngine.PhysicsModule">
+          <HintPath>D:\SteamLibrary\steamapps\common\TheLongDark\MelonLoader\Il2CppAssemblies\UnityEngine.PhysicsModule.dll</HintPath>
+        </Reference>
     </ItemGroup>
 </Project>

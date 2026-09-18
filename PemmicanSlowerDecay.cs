@@ -1,5 +1,4 @@
 ﻿#nullable disable
-
 using System;
 using System.Collections;
 using System.Reflection;
@@ -46,44 +45,71 @@ public class Main : MelonMod
     }
 }
 
-[HarmonyPatch(typeof(GearItem), nameof(GearItem.Awake))]
-internal static class GearItem_Awake_Patch
+[HarmonyPatch(typeof(GearItem), "DecayOverTODHours")]
+internal static class GearItem_DecayOverTODHours_Patch
 {
-    private static void Postfix(GearItem __instance)
+    private const float k_InsideDecay = 0.025f;
+    private const float k_OutsideDecay = 0.0025f;
+
+    private static bool IsPemmican(GearItem gi)
     {
-        if (__instance == null) return;
-
-        string nm = __instance.name ?? "<null>";
-
-        if (!nm.Contains("GEAR_CookedBarPemmican", StringComparison.OrdinalIgnoreCase))
-            return;
-
-        MelonLogger.Msg($"[PemmicanSlowerDecay] Awake detected for {nm} (id={__instance.m_InstanceID})");
-
-        MelonCoroutines.Start(DelayedDecayPatch(__instance));
+        string nm = gi?.name;
+        return !string.IsNullOrEmpty(nm) &&
+               nm.Contains("GEAR_CookedBarPemmican", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IEnumerator DelayedDecayPatch(GearItem gi)
+    private static void Prefix(GearItem __instance)
     {
-        for (int i = 0; i < 5; i++)
-            yield return null;
+        if (__instance == null || !IsPemmican(__instance)) return;
 
-        if (gi == null)
-            yield break;
+        FoodItem foodItem = __instance.m_FoodItem;
+        if (foodItem == null) return;
 
-        if (gi.m_FoodItem == null)
+        bool physicallyIndoors = IsPhysicallyIndoors(__instance);
+        float target = physicallyIndoors ? k_InsideDecay : k_OutsideDecay;
+
+        foodItem.m_DailyHPDecayInside = target;
+        foodItem.m_DailyHPDecayOutside = target;
+    }
+
+    // For GearInfo to display both the correct decay values
+    private static void Postfix(GearItem __instance)
+    {
+        if (__instance == null || !IsPemmican(__instance)) return;
+
+        FoodItem foodItem = __instance.m_FoodItem;
+        if (foodItem == null) return;
+
+        foodItem.m_DailyHPDecayInside = k_InsideDecay;
+        foodItem.m_DailyHPDecayOutside = k_OutsideDecay;
+    }
+
+    private static bool IsPhysicallyIndoors(GearItem gi)
+    {
+        Weather weather = GameManager.GetWeatherComponent();
+        if (weather != null && weather.IsIndoorScene())
+            return true;
+
+        Collider itemCollider = gi.GetComponent<Collider>();
+        if (itemCollider == null)
+            return false;
+
+        Collider[] nearby = Physics.OverlapSphere(
+            itemCollider.bounds.center,
+            itemCollider.bounds.extents.magnitude);
+
+        for (int i = 0; i < nearby.Length; i++)
         {
-            MelonLogger.Msg($"[PemmicanSlowerDecay] {gi.name} has no FoodItem even after delay — skipping.");
-            yield break;
+            Collider other = nearby[i];
+            if (other == itemCollider) continue;
+
+            IndoorSpaceTrigger trigger = other.GetComponent<IndoorSpaceTrigger>();
+            if (trigger == null) continue;
+            if (trigger.m_DontCountAsInterior) continue;
+
+            return true;
         }
-
-        float oldInside = gi.m_FoodItem.m_DailyHPDecayInside;
-        float oldOutside = gi.m_FoodItem.m_DailyHPDecayOutside;
-
-        gi.m_FoodItem.m_DailyHPDecayInside = 0.025f;
-        gi.m_FoodItem.m_DailyHPDecayOutside = 0.0025f;
-
-        MelonLogger.Msg($"[PemmicanSlowerDecay] Patched {gi.name} decay: inside {oldInside} --> {gi.m_FoodItem.m_DailyHPDecayInside}, outside {oldOutside} --> {gi.m_FoodItem.m_DailyHPDecayOutside}");
+        return false;
     }
 }
 
